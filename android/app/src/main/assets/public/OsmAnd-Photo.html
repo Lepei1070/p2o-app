@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Photo S23 vers OsmAnd (Hors-Ligne Autonome)</title>
+  <script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #131b2e;
+      --card-border: #1e293b;
+      --amber: #f59e0b;
+      --amber-hover: #d97706;
+      --emerald: #10b981;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; display: flex; flex-direction: column; align-items: center; }
+    .container { width: 100%; max-width: 480px; }
+    header { text-align: center; margin: 24px 0 20px; }
+    h1 { font-size: 1.5rem; font-weight: 800; color: #fff; }
+    h1 span { color: var(--amber); }
+    p.subtitle { font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; }
+    .card { background: var(--card); border: 1px solid var(--card-border); border-radius: 20px; padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5); }
+    .btn-main { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #000; border: none; border-radius: 16px; width: 100%; padding: 18px 16px; font-size: 1.1rem; font-weight: 800; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 8px 20px rgba(245,158,11,0.3); transition: transform 0.1s; }
+    .btn-main:active { transform: scale(0.98); }
+    .btn-sub { font-size: 0.75rem; font-weight: 600; opacity: 0.85; margin-top: 4px; }
+    .tip { background: rgba(0,0,0,0.3); border-radius: 12px; padding: 12px; margin-top: 14px; font-size: 0.8rem; line-height: 1.4; color: #cbd5e1; border-left: 3px solid var(--amber); }
+    .coords-card { display: none; background: #0b1528; border: 1px solid #1e3a8a; border-radius: 16px; padding: 16px; margin-top: 16px; }
+    .coords-title { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--amber); font-weight: 700; margin-bottom: 6px; }
+    .coords-val { font-size: 1.3rem; font-family: monospace; font-weight: 700; color: #fff; margin-bottom: 14px; }
+    .btn-osmand { background: var(--emerald); color: #fff; border: none; border-radius: 14px; width: 100%; padding: 16px; font-size: 1.05rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; cursor: pointer; box-shadow: 0 6px 18px rgba(16,185,129,0.35); }
+    .btn-osmand:active { transform: scale(0.98); }
+    .preview-img { width: 100%; height: 180px; object-fit: cover; border-radius: 12px; margin-bottom: 12px; border: 1px solid #334155; }
+    .error-box { display: none; background: rgba(239,68,68,0.15); border: 1px solid #ef4444; border-radius: 12px; padding: 12px; color: #fca5a5; font-size: 0.85rem; margin-top: 14px; }
+    .badge-offline { display: inline-flex; align-items: center; gap: 6px; background: rgba(16,185,129,0.15); color: var(--emerald); border: 1px solid rgba(16,185,129,0.3); padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="badge-offline">⚡ 100% Autonome & Hors-Ligne</div>
+      <h1>Photo S23 <span>➔ OsmAnd</span></h1>
+      <p class="subtitle">Extraction GPS locale directe sans aucun serveur</p>
+    </header>
+
+    <div class="card">
+      <input type="file" id="fileInput" style="display:none;" />
+      
+      <button class="btn-main" onclick="document.getElementById('fileInput').click()">
+        <div>📷 Choisir une Photo</div>
+        <div class="btn-sub">Fichiers ➔ Menu ☰ ➔ Cx Explorateur</div>
+      </button>
+
+      <div class="tip">
+        <strong>💡 Astuce Samsung S23 :</strong><br>
+        1. Touchez le dossier bleu <strong>« Fichiers »</strong>.<br>
+        2. Touchez le menu <strong>☰</strong> en haut à gauche.<br>
+        3. Choisissez <strong>« Cx Explorateur »</strong>.
+      </div>
+
+      <div id="errorBox" class="error-box"></div>
+
+      <div id="coordsCard" class="coords-card">
+        <img id="preview" class="preview-img" style="display:none;" />
+        <div class="coords-title">Coordonnées GPS Détectées</div>
+        <div id="coordsText" class="coords-val">--</div>
+        
+        <a id="osmandBtn" href="#" class="btn-osmand">
+          <span>🚀 OUVRIR DANS OSMAND</span>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById('fileInput');
+    const coordsCard = document.getElementById('coordsCard');
+    const coordsText = document.getElementById('coordsText');
+    const osmandBtn = document.getElementById('osmandBtn');
+    const errorBox = document.getElementById('errorBox');
+    const preview = document.getElementById('preview');
+
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      errorBox.style.display = 'none';
+      coordsCard.style.display = 'none';
+
+      // Afficher preview
+      if (file.type.startsWith('image/')) {
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+      } else {
+        preview.style.display = 'none';
+      }
+
+      try {
+        const exifData = await exifr.parse(file, { gps: true, tiff: true, xmp: true });
+        
+        if (exifData && exifData.latitude && exifData.longitude) {
+          const lat = exifData.latitude.toFixed(6);
+          const lon = exifData.longitude.toFixed(6);
+          
+          coordsText.textContent = `${lat}, ${lon}`;
+          
+          // Lien OsmAnd
+          const osmandUri = `geo:${lat},${lon}?q=${lat},${lon}(Photo)`;
+          osmandBtn.href = osmandUri;
+          
+          coordsCard.style.display = 'block';
+        } else {
+          showError("⚠️ Aucune coordonnée GPS trouvée dans ce fichier.<br>Pensez à passer par <strong>Cx Explorateur</strong> pour préserver les métadonnées brutes de l'appareil photo !");
+        }
+      } catch (err) {
+        showError("Erreur d'analyse : " + err.message);
+      }
+    });
+
+    function showError(msg) {
+      errorBox.innerHTML = msg;
+      errorBox.style.display = 'block';
+    }
+  </script>
+</body>
+</html>

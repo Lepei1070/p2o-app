@@ -1,0 +1,8 @@
+{
+  "appId": "com.p2o.osmand",
+  "appName": "P2O OsmAnd",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
